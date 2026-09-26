@@ -4,10 +4,11 @@ import logging
 from collections import Counter
 from pathlib import Path
 
-from . import pipeline, sources
+from . import export, pipeline, sources
 from .fetch import Fetcher
 
 DATA = Path("data")
+OUTPUT = Path("output")
 CACHE = Path(".cache")
 
 
@@ -41,6 +42,11 @@ def cmd_enrich(args):
     logging.info("http: %s", dict(fetcher.stats))
 
 
+def cmd_export(args):
+    rows = export.write_outputs(DATA, OUTPUT)
+    logging.info("wrote %d stores to %s (stores.csv, stores.json, report.md)", len(rows), OUTPUT)
+
+
 def main():
     parser = argparse.ArgumentParser(prog="python -m shopify_india")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -62,6 +68,9 @@ def main():
     p = sub.add_parser("enrich", help="fetch contact details, socials, logo etc. for the Indian stores")
     p.add_argument("--workers", type=int, default=8)
     p.set_defaults(func=cmd_enrich)
+
+    p = sub.add_parser("export", help="write output/stores.csv, stores.json and report.md")
+    p.set_defaults(func=cmd_export)
 
     args = parser.parse_args()
     logging.basicConfig(
