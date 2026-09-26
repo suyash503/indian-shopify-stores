@@ -103,7 +103,7 @@ def verify(fetcher, candidates, out_path, workers=16, target=None):
 
 # enrich --------------------------------------------------------------------------------
 
-def enrich_one(fetcher, rec):
+def enrich_one(fetcher, rec, logo_dir=None):
     base = (rec.get("url") or f"https://{rec['domain']}").rstrip("/")
     out = {k: rec.get(k) for k in ("shop_id", "domain", "url", "myshopify_domain", "name", "currency", "source")}
 
@@ -148,6 +148,9 @@ def enrich_one(fetcher, rec):
 
     tagline, tagline_source = _tagline(home_page, rec)
     logo, logo_source = next(((p["logo"]) for p in pages if p["logo"][0]), home_page["logo"])
+    if not logo and home_page["logo_svg"] and logo_dir:
+        logo = _save_svg(home_page["logo_svg"], logo_dir, rec.get("domain") or rec["myshopify_domain"])
+        logo_source = "inline svg, saved as a file"
 
     texts = [(home_page["title"], 3), (tagline or "", 3), (home_page["site_name"], 1)]
     texts += [(name, 1) for name in home_page["collections"]]
@@ -177,7 +180,7 @@ def enrich_one(fetcher, rec):
     }
 
 
-def enrich(fetcher, verified_path, out_path, workers=8):
+def enrich(fetcher, verified_path, out_path, workers=8, logo_dir=None):
     out_path = Path(out_path)
     done = {r.get("shop_id") for r in read_jsonl(out_path)}
     todo, queued = [], set()
@@ -197,7 +200,7 @@ def enrich(fetcher, verified_path, out_path, workers=8):
             if count["n"] % 50 == 0:
                 log.info("enrich: %d/%d", count["n"], len(todo))
 
-        run_parallel(todo, lambda r: enrich_one(fetcher, r), workers, handle)
+        run_parallel(todo, lambda r: enrich_one(fetcher, r, logo_dir), workers, handle)
 
 
 # small helpers -----------------------------------------------------------------------------
@@ -225,6 +228,16 @@ def _tagline(home, rec):
     if rec.get("description"):
         return rec["description"].strip()[:500], "store description (meta.json)"
     return None, None
+
+
+def _save_svg(markup, logo_dir, domain):
+    logo_dir = Path(logo_dir)
+    logo_dir.mkdir(parents=True, exist_ok=True)
+    if "xmlns=" not in markup.split(">", 1)[0]:
+        markup = markup.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+    path = logo_dir / f"{domain.removeprefix('www.')}.svg"
+    path.write_text(markup, encoding="utf-8")
+    return path.as_posix()
 
 
 def _jsonld_addresses(pages):

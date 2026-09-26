@@ -38,7 +38,11 @@ def cmd_verify(args):
 
 def cmd_enrich(args):
     fetcher = make_fetcher(args)
-    pipeline.enrich(fetcher, DATA / "verified.jsonl", DATA / "stores.jsonl", workers=args.workers)
+    if args.redo:
+        (DATA / "stores.jsonl").unlink(missing_ok=True)
+    pipeline.enrich(
+        fetcher, DATA / "verified.jsonl", DATA / "stores.jsonl", workers=args.workers, logo_dir=OUTPUT / "logos"
+    )
     logging.info("http: %s", dict(fetcher.stats))
 
 
@@ -67,6 +71,7 @@ def main():
 
     p = sub.add_parser("enrich", help="fetch contact details, socials, logo etc. for the Indian stores")
     p.add_argument("--workers", type=int, default=8)
+    p.add_argument("--redo", action="store_true", help="start over; pages come from the cache, so it's quick")
     p.set_defaults(func=cmd_enrich)
 
     p = sub.add_parser("export", help="write output/stores.csv, stores.json and report.md")

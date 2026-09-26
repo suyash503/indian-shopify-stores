@@ -66,6 +66,10 @@ def parse_page(page_html, url):
     found["phones"] = _phones_from_links(soup)
     found["socials"] = _social_links(soup, found["jsonld_orgs"])
     found["logo"] = _logo(soup, url, found["jsonld_orgs"])
+    found["logo_svg"] = None
+    if not found["logo"][0]:
+        kind, found["logo_svg"] = _logo_without_image(soup, url)
+        found["logo"] = (None, kind)
     found["taglines"] = _taglines(soup)
     found["collections"] = _collection_names(soup)
     found["contact_links"] = _contact_links(soup, url)
@@ -253,15 +257,37 @@ def _logo(soup, page_url, orgs):
     og = _meta(soup, "og:image")
     if og and "logo" in og.lower():
         return clean_image_url(og, page_url), "og:image"
-    if header and header.select_one("[class*=logo] svg, svg[class*=logo]"):
-        return None, "inline svg"
+    return None, None
+
+
+def _logo_without_image(soup, page_url):
+    """No logo image anywhere. Is the logo an inline <svg> (which we can save as a
+    file), or just the store name in text? Returns (kind, svg markup)."""
+    header = soup.find("header") or soup.select_one("[class*=header], [id*=header]")
+    if not header:
+        return None, None
+    # only elements whose *own* class says logo; a class on <header> like
+    # "header--logo-center" would otherwise make every icon in it look like a logo
+    spots = [el for el in header.find_all(True) if any("logo" in c.lower() for c in el.get("class", []))]
+    spots += [a for a in header.find_all("a", href=True) if urlsplit(urljoin(page_url, a["href"])).path in ("", "/")]
+    for el in spots:
+        svg = el if el.name == "svg" else el.find("svg")
+        if svg and svg.find(["path", "text", "polygon", "circle", "rect", "g"]) and not svg.find("use"):
+            return "inline svg", str(svg)  # <use> points at a sprite elsewhere, useless on its own
+    for el in spots:
+        if el.get_text(strip=True) and not el.find(["img", "svg"]):
+            return "text only (no logo image on the site)", None
     return None, None
 
 
 def _hints(img):
+    """Text around an <img> that might say 'logo': its own attributes and its
+    two nearest parents, stopping at the header itself."""
     parts = [img.get("alt", ""), img.get("src", ""), img.get("data-src", ""), img.get("id", "")]
     parts += img.get("class", [])
-    for parent in list(img.parents)[:3]:
+    for parent in list(img.parents)[:2]:
+        if parent.name in ("header", "body"):
+            break
         parts += parent.get("class", []) or []
         parts.append(parent.get("id", "") or "")
     return " ".join(str(p) for p in parts).lower()
