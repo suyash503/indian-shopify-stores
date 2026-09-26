@@ -36,6 +36,12 @@ def cmd_verify(args):
     logging.info("http: %s", dict(fetcher.stats))
 
 
+def cmd_recheck(args):
+    fetcher = make_fetcher(args)
+    pipeline.recheck_dns_misses(fetcher, DATA / "verified.jsonl", workers=args.workers)
+    logging.info("http: %s", dict(fetcher.stats))
+
+
 def cmd_enrich(args):
     fetcher = make_fetcher(args)
     if args.redo:
@@ -68,6 +74,10 @@ def main():
     p.add_argument("--limit", type=int, help="only look at the first N candidates")
     p.add_argument("--target", type=int, help="stop once this many Indian stores are found")
     p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("recheck", help="ask domains whose DNS isn't Shopify's for meta.json anyway (stores behind a CDN)")
+    p.add_argument("--workers", type=int, default=16)
+    p.set_defaults(func=cmd_recheck)
 
     p = sub.add_parser("enrich", help="fetch contact details, socials, logo etc. for the Indian stores")
     p.add_argument("--workers", type=int, default=8)

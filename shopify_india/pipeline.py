@@ -64,10 +64,22 @@ def _safe(work, item):
 
 # verify ------------------------------------------------------------------------------
 
-def verify_one(fetcher, candidate):
+def latest_records(path):
+    """verified.jsonl can hold a second line for the same candidate (from
+    recheck); the last one wins."""
+    latest = {}
+    for rec in read_jsonl(path):
+        if "candidate" in rec:
+            latest[rec["candidate"]] = rec
+    return list(latest.values())
+
+
+def verify_one(fetcher, candidate, probe=False):
     domain, source = candidate
-    check, dns = shopify.verify(fetcher, domain)
+    check, dns = shopify.verify(fetcher, domain, probe=probe)
     rec = {"candidate": domain, "source": source, "dns": dns, "shopify": check.is_shopify, "reason": check.reason}
+    if probe:
+        rec["probed"] = True
     if check.is_shopify:
         rec |= {ours: check.meta.get(theirs) for theirs, ours in META_FIELDS.items()}
         rec["india"] = india.first_pass(check.meta, rec["domain"] or domain)
@@ -75,14 +87,25 @@ def verify_one(fetcher, candidate):
 
 
 def verify(fetcher, candidates, out_path, workers=16, target=None):
-    out_path = Path(out_path)
-    done = read_jsonl(out_path)
-    seen = {r["candidate"] for r in done if "candidate" in r}
-    indian = sum(1 for r in done if r.get("india") == "yes")
+    done = latest_records(out_path)
+    seen = {r["candidate"] for r in done}
     todo = [c for c in candidates if c[0] not in seen]
-    log.info("verify: %d candidates, %d already done, %d Indian so far", len(candidates), len(seen), indian)
+    log.info("verify: %d candidates, %d already done", len(candidates), len(seen))
+    _verify_many(fetcher, todo, out_path, workers, target=target, done=done)
 
-    counts = {"done": 0, "shopify": 0, "indian": indian}
+
+def recheck_dns_misses(fetcher, out_path, workers=16):
+    """Second pass over domains whose DNS doesn't point at Shopify: ask for
+    /meta.json anyway. Catches stores behind their own CDN (about 2% of these
+    in a sample), at the cost of two requests per domain."""
+    done = latest_records(out_path)
+    todo = [(r["candidate"], r["source"]) for r in done if r.get("reason") == "dns: elsewhere" and not r.get("probed")]
+    log.info("recheck: %d domains whose DNS points away from Shopify", len(todo))
+    _verify_many(fetcher, todo, out_path, workers, probe=True, done=done)
+
+
+def _verify_many(fetcher, todo, out_path, workers, target=None, probe=False, done=()):
+    counts = {"done": 0, "shopify": 0, "indian": sum(1 for r in done if r.get("india") == "yes")}
     started = time.monotonic()
     with open(out_path, "a", encoding="utf-8") as out:
         def handle(rec):
@@ -93,12 +116,12 @@ def verify(fetcher, candidates, out_path, workers=16, target=None):
             counts["indian"] += rec.get("india") == "yes"
             if counts["done"] % 200 == 0:
                 rate = counts["done"] / (time.monotonic() - started)
-                log.info("verify: %d/%d checked (%.1f/s), %d Shopify, %d Indian total",
+                log.info("%d/%d checked (%.1f/s), %d Shopify, %d Indian total",
                          counts["done"], len(todo), rate, counts["shopify"], counts["indian"])
 
         stop = (lambda: counts["indian"] >= target) if target else (lambda: False)
-        run_parallel(todo, lambda c: verify_one(fetcher, c), workers, handle, stop)
-    log.info("verify: finished, %d Indian stores so far", counts["indian"])
+        run_parallel(todo, lambda c: verify_one(fetcher, c, probe), workers, handle, stop)
+    log.info("finished: %d checked, %d Shopify, %d Indian stores in total", counts["done"], counts["shopify"], counts["indian"])
 
 
 # enrich --------------------------------------------------------------------------------
@@ -184,7 +207,7 @@ def enrich(fetcher, verified_path, out_path, workers=8, logo_dir=None):
     out_path = Path(out_path)
     done = {r.get("shop_id") for r in read_jsonl(out_path)}
     todo, queued = [], set()
-    for rec in read_jsonl(verified_path):
+    for rec in latest_records(verified_path):
         sid = rec.get("shop_id")
         if rec.get("india") in ("yes", "maybe") and sid not in done and sid not in queued:
             todo.append(rec)

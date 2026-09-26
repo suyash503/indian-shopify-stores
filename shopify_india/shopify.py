@@ -63,15 +63,19 @@ def check_meta(fetcher, host):
     return ShopCheck(True, "ok", data)
 
 
-def verify(fetcher, domain):
-    """Returns (ShopCheck, dns_verdict). myshopify.com hosts skip the DNS step."""
+def verify(fetcher, domain, probe=False):
+    """Returns (ShopCheck, dns_verdict). myshopify.com hosts skip the DNS step.
+    With probe=True, a domain whose DNS points somewhere else still gets asked
+    for /meta.json, which finds stores sitting behind their own CDN."""
     dns = None
     if not domain.endswith(".myshopify.com"):
         dns = dns_verdict(domain)
-        if dns != "shopify":
+        if dns == "no dns" or (dns == "elsewhere" and not probe):
             return ShopCheck(False, f"dns: {dns}"), dns
 
     check = check_meta(fetcher, domain)
     if check.reason in ("timeout", "connection error") and not domain.endswith(".myshopify.com"):
         check = check_meta(fetcher, "www." + domain)  # a few sites only answer on www
+    if dns == "elsewhere" and not check.is_shopify:
+        check.reason = f"dns elsewhere, then {check.reason}"
     return check, dns

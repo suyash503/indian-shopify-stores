@@ -5,7 +5,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from .pipeline import read_jsonl
+from .pipeline import latest_records, read_jsonl
 from .sources import read_candidates
 
 NETWORKS = ["instagram", "facebook", "twitter", "linkedin", "youtube"]
@@ -79,7 +79,7 @@ def write_outputs(data_dir, out_dir):
 
 def build_report(data_dir, stores, rows):
     candidates = read_candidates(data_dir / "candidates.csv")
-    verified = read_jsonl(data_dir / "verified.jsonl")
+    verified = latest_records(data_dir / "verified.jsonl")
     total = len(rows) or 1
     lines = ["# Run report", ""]
 
