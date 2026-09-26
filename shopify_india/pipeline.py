@@ -31,8 +31,14 @@ def read_jsonl(path):
     path = Path(path)
     if not path.exists():
         return []
+    records = []
     with open(path, encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+        for line in f:
+            try:
+                records.append(json.loads(line))
+            except ValueError:
+                pass  # blank, or the half-written last line of a run that got killed
+    return records
 
 
 def run_parallel(items, work, workers, handle, stop=lambda: False):
