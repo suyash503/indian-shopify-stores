@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# raw HTTP cache, rebuilt on every run
+.cache/
+
+.env
+.vscode/
+.idea/
