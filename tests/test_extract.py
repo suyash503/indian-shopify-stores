@@ -79,3 +79,16 @@ def test_phone_normalisation():
 def test_shopify_image_urls_are_full_size():
     assert clean_image_url("//x.in/cdn/shop/files/logo_200x.png?v=1", "https://x.in/") == "https://x.in/cdn/shop/files/logo.png?v=1"
     assert clean_image_url("/files/logo.png?width=500&v=2", "https://x.in/a") == "https://x.in/files/logo.png?v=2"
+
+
+def test_hero_and_about_text_skip_theme_boilerplate():
+    page = """<html><body><header><a href="/about-us">About</a></header><main>
+    <h2>Featured collection</h2>
+    <h1>Handwoven Banarasi sarees straight from Varanasi looms</h1>
+    <p>Free shipping</p>
+    <p>We are a family of weavers who have been making silk sarees in Varanasi since 1952, selling direct.</p>
+    </main></body></html>"""
+    found = parse_page(page, "https://weave.in/")
+    assert found["hero"] == "Handwoven Banarasi sarees straight from Varanasi looms"
+    assert found["first_paragraph"].startswith("We are a family of weavers")
+    assert found["about_links"] == ["https://weave.in/about-us"]

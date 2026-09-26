@@ -49,6 +49,13 @@ LOGO_BLOCKLIST = (
     "google-play", "googleplay", "app-store", "appstore", "playstore", "badge", "trust", "award",
     "featured", "as-seen", "press", "partner", "shopify",
 )
+# section headings every Shopify theme ships with; not a brand's own words
+GENERIC_HEADING = re.compile(
+    r"^(welcome|featured|shop|new|best|top|trending|our|all|view|explore|subscribe|join|follow|"
+    r"testimonials?|customer|reviews?|faq|blog|latest|collections?|categories|products?|bestsellers?|"
+    r"sign up|what our|as seen|free shipping|sale)\b",
+    re.I,
+)
 SHOPIFY_SIZE_SUFFIX = re.compile(r"_(?:\{width\}x|\d+x\d*|\d*x\d+)(?:@\dx)?(?=\.\w+$)")
 
 ORG_TYPES = {"organization", "corporation", "brand", "store", "onlinestore", "localbusiness", "onlinebusiness"}
@@ -73,6 +80,7 @@ def parse_page(page_html, url):
     found["taglines"] = _taglines(soup)
     found["collections"] = _collection_names(soup)
     found["contact_links"] = _contact_links(soup, url)
+    found["about_links"] = _same_site_links(soup, url, "about")
 
     # everything below reads visible text, so scripts and styles go now
     for tag in soup(["script", "style", "noscript", "template", "svg", "iframe"]):
@@ -81,6 +89,8 @@ def parse_page(page_html, url):
     footer = soup.find("footer") or soup.select_one("[class*=footer], [id*=footer]")
     found["text"] = text
     found["footer_text"] = footer.get_text(" ", strip=True) if footer else ""
+    found["hero"] = _hero_text(soup)
+    found["first_paragraph"] = _first_paragraph(soup)
 
     found["emails"] = _unique(found["emails"] + _emails_in_text(text))
     # phone numbers in running text are only trusted in the footer or on contact pages;
@@ -351,6 +361,34 @@ def _contact_links(soup, page_url):
         elif "contact" in a.get_text(" ").lower():
             by_text.append(href)
     return _unique(by_url + by_text)
+
+
+def _same_site_links(soup, page_url, word):
+    site = urlsplit(page_url).netloc
+    links = [urljoin(page_url, a["href"]).split("#")[0] for a in soup.select("a[href]")]
+    return _unique(u for u in links if urlsplit(u).netloc == site and word in urlsplit(u).path.lower())
+
+
+def _main_content(soup):
+    return soup.find("main") or soup.select_one("#MainContent, [role=main]") or soup.body or soup
+
+
+def _hero_text(soup):
+    """First real heading on the homepage, e.g. 'Handwoven Sarees from Varanasi'."""
+    for tag in _main_content(soup).find_all(["h1", "h2"], limit=10):
+        text = _clean(tag.get_text(" "))
+        if 5 <= len(text.split()) <= 25 and not GENERIC_HEADING.match(text):
+            return text
+    return None
+
+
+def _first_paragraph(soup):
+    """First paragraph with some substance, for About pages."""
+    for p in _main_content(soup).find_all("p", limit=40):
+        text = _clean(p.get_text(" "))
+        if 60 <= len(text) <= 700:
+            return text
+    return None
 
 
 def _is_contact_page(url):

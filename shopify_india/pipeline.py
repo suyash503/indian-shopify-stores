@@ -176,6 +176,10 @@ def enrich_one(fetcher, rec, logo_dir=None):
     state, state_source = india.find_state(rec, site_text)
 
     tagline, tagline_source = _tagline(home_page, rec)
+    if not tagline:
+        tagline, tagline_source = _about_page_tagline(fetcher, base, home_page, fetched)
+    if not tagline and home_page["hero"]:
+        tagline, tagline_source = home_page["hero"], "homepage hero text"
     logo, logo_source = next(((p["logo"]) for p in pages if p["logo"][0]), home_page["logo"])
     if not logo and home_page["logo_svg"] and logo_dir:
         logo = _save_svg(home_page["logo_svg"], logo_dir, rec.get("domain") or rec["myshopify_domain"])
@@ -251,11 +255,25 @@ def _sort_emails(emails, domain):
 
 
 def _tagline(home, rec):
+    # plenty of stores set og:description to just the store name; that's not a tagline
+    not_taglines = {(home["title"] or "").lower(), (home["site_name"] or "").lower(), (rec.get("name") or "").lower()}
     for text, source in home["taglines"]:
-        if len(text) >= 15 and text.lower() != (home["title"] or "").lower():
+        if len(text) >= 15 and text.lower() not in not_taglines:
             return text[:500], source
     if rec.get("description"):
         return rec["description"].strip()[:500], "store description (meta.json)"
+    return None, None
+
+
+def _about_page_tagline(fetcher, base, home, fetched):
+    """No meta description: use the first real paragraph of the About page."""
+    for url in (home["about_links"][:1] or [base + "/pages/about-us", base + "/pages/about"]):
+        page = fetcher.get(url)
+        if not page.ok:
+            continue
+        fetched.append(page.url)
+        text = parse_page(page.text, page.url)["first_paragraph"]
+        return (text[:500], "about page") if text else (None, None)
     return None, None
 
 
