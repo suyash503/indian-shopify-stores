@@ -92,3 +92,11 @@ def test_hero_and_about_text_skip_theme_boilerplate():
     assert found["hero"] == "Handwoven Banarasi sarees straight from Varanasi looms"
     assert found["first_paragraph"].startswith("We are a family of weavers")
     assert found["about_links"] == ["https://weave.in/about-us"]
+
+
+def test_logo_on_shopify_cdn_is_fine_but_collection_images_are_not():
+    page = """<html><body>
+    <div class="rail"><img src="//cdn.shopify.com/s/files/1/0/collections/Gold_Shop_Logo_1.png"></div>
+    <div class="site-logo"><img src="//cdn.shopify.com/s/files/1/0/files/brand.png" alt="Brand"></div>
+    </body></html>"""
+    assert parse_page(page, "https://brand.in/")["logo"] == ("https://cdn.shopify.com/s/files/1/0/files/brand.png", "logo image")

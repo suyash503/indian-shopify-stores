@@ -47,7 +47,9 @@ TOLL_FREE_RE = re.compile(r"(?<!\d)1800[\s-]?\d{3}[\s-]?\d{3,4}(?!\d)")
 LOGO_BLOCKLIST = (
     "payment", "visa", "mastercard", "amex", "rupay", "upi", "paytm", "razorpay", "gpay", "phonepe",
     "google-play", "googleplay", "app-store", "appstore", "playstore", "badge", "trust", "award",
-    "featured", "as-seen", "press", "partner", "shopify",
+    "featured", "as-seen", "press", "partner", "powered",
+    # Shopify keeps collection and product images under these paths; a logo never lives there
+    "/collections/", "/products/",
 )
 # section headings every Shopify theme ships with; not a brand's own words
 GENERIC_HEADING = re.compile(
