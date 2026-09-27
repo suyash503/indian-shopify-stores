@@ -154,7 +154,11 @@ class Fetcher:
         # requests falls back to latin-1 when there's no charset, which mangles the ₹ sign
         charset = resp.encoding if "charset" in resp.headers.get("content-type", "") else "utf-8"
         headers = {k: resp.headers[k] for k in KEEP_HEADERS if k in resp.headers}
-        return Page(resp.url, resp.status_code, body.decode(charset or "utf-8", "replace"), headers)
+        try:
+            text = body.decode(charset or "utf-8", "replace")
+        except LookupError:  # sites do declare charsets like "cp-1251" that don't exist
+            text = body.decode("utf-8", "replace")
+        return Page(resp.url, resp.status_code, text, headers)
 
     def _wait_turn(self):
         with self._lock:
