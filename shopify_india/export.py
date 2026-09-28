@@ -19,7 +19,7 @@ def final_stores(stores):
     """Indian stores only, one row per shop and per domain."""
     keep, seen_ids, seen_domains = [], set(), set()
     for s in stores:
-        if s.get("error") or not s.get("is_indian"):
+        if s.get("error") or not s.get("is_indian") or s.get("not_a_store"):
             continue
         domain = (s.get("domain") or "").lower().removeprefix("www.")
         if s.get("shop_id") in seen_ids or domain in seen_domains:

@@ -8,9 +8,11 @@ Both stages append one JSON line per item as they go, so a run that dies halfway
 """
 import json
 import logging
+import re
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from . import category, india, shopify
 from .extract import parse_page, pick_socials
@@ -139,6 +141,9 @@ def enrich_one(fetcher, rec, logo_dir=None):
     home = fetcher.get(base + "/")
     if not home.ok:
         return out | {"error": f"homepage: {home.error or home.status}"}
+    if urlsplit(home.url).path.startswith("/password"):
+        # meta.json still answers for these, but the shop isn't open to the public
+        return out | {"error": "password protected"}
     pages = [parse_page(home.text, home.url)]
     fetched = [home.url]
 
@@ -210,7 +215,7 @@ def enrich_one(fetcher, rec, logo_dir=None):
         "state_source": state_source,
         "city": rec.get("city"),
         "pages": fetched,
-    }
+    } | {"not_a_store": _not_a_real_store(rec, emails, phones, pages)}
 
 
 def enrich(fetcher, verified_path, out_path, workers=8, logo_dir=None):
@@ -237,6 +242,26 @@ def enrich(fetcher, verified_path, out_path, workers=8, logo_dir=None):
 
 
 # small helpers -----------------------------------------------------------------------------
+
+# in the myshopify handle: bookeasy-demo-store, counttest21, bookly-theme, reminder-app-demo
+DEMO_HANDLE = re.compile(r"(^|[-_])(demo|test|sandbox|staging|dummy|dev)\d*($|[-_])|(demo|test\d*|theme)$|-app($|-)", re.I)
+# in the shop name: "Gocart-Demo (pw: 12345)", "Agrim Demo Store"
+DEMO_NAME = re.compile(r"\(password|\(pw\b|\bdemo store\b|\btest store\b", re.I)
+
+
+def _not_a_real_store(rec, emails, phones, pages):
+    """Theme and app developers keep demo shops with an Indian address; they pass
+    every Shopify and India check but aren't businesses. Returns a reason or None."""
+    handle = (rec.get("myshopify_domain") or "").removesuffix(".myshopify.com")
+    own_domain = not (rec.get("domain") or "").endswith(".myshopify.com")
+    # real brands often have handles like "brand-dev" or "brand-staging", so the
+    # handle only counts against stores that never got their own domain
+    if DEMO_NAME.search(rec.get("name") or "") or (not own_domain and DEMO_HANDLE.search(handle)):
+        return "demo or test store"
+    if not own_domain and not emails and not phones and not any(p["socials"] for p in pages):
+        return "no own domain, no contacts, no socials"
+    return None
+
 
 def _merge(lists):
     seen, out = set(), []
