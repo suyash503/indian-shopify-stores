@@ -1,0 +1,12 @@
+{
+  "tranco_list_id": "L5PZ4",
+  "common_crawl": [
+    "CC-MAIN-2026-39",
+    "CC-MAIN-2026-34",
+    "CC-MAIN-2026-30"
+  ],
+  "counts": {
+    "tranco": 11601,
+    "commoncrawl": 22386
+  }
+}
